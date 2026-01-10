@@ -31,7 +31,14 @@ export async function getAllYearIndexes(
 ): Promise<IYearResponse[]> {
   console.log(`Fetching year indexes for years: ${years.join(", ")}...`);
   const promises = years.map((year) => getYearIndex(year));
-  return await Promise.all(promises);
+  return await Promise.allSettled(promises).then((results) =>
+    results
+      .filter(
+        (result): result is PromiseFulfilledResult<IYearResponse> =>
+          result.status === "fulfilled",
+      )
+      .map((result) => result.value),
+  );
 }
 
 export function driverListPathsFromIndex(yearIndex: IYearResponse): string[] {
