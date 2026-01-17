@@ -15,6 +15,10 @@ async function checkHeadshotExists(url: string): Promise<boolean> {
   return response.ok;
 }
 
+function removeDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 async function main() {
   console.log("Starting driver headshot script...");
   const yearIndexes = await getAllYearIndexes(livetimingYears);
@@ -29,11 +33,18 @@ async function main() {
   for (const result of driverLists) {
     if (result.status === "fulfilled") {
       for (const driver of Object.values(result.value)) {
-        if (driver.Reference) refToTla.set(driver.Reference, driver.Tla);
+        if (driver.Reference) {
+          refToTla.set(driver.Reference, driver.Tla);
+        } else if (driver.FirstName && driver.LastName) {
+          const generatedRef =
+            removeDiacritics(driver.FirstName).toUpperCase().slice(0, 3) +
+            removeDiacritics(driver.LastName).toUpperCase().slice(0, 3) +
+            "01";
+          refToTla.set(generatedRef, driver.Tla);
+        }
       }
     }
   }
-
   console.log(`Found ${refToTla.size} unique driver references.`);
 
   const headshots = headshotYears.flatMap((year) =>
