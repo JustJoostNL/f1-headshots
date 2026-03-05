@@ -10,9 +10,18 @@ import type { IDriverListResponse } from "./types/livetiming";
 const headshotTemplateUrl =
   "https://media.formula1.com/content/dam/fom-website/2018-redesign-assets/drivers/{year}/{ref}.png";
 
-async function checkHeadshotExists(url: string): Promise<boolean> {
-  const response = await fetch(url, { method: "HEAD" });
-  return response.ok;
+const headshotFallbackTemplateUrl =
+  "https://assets.multiviewer.dev/driver-headshots/{year}/{tla}.png";
+
+async function resolveHeadshotUrl(
+  primaryUrl: string,
+  fallbackUrl: string,
+): Promise<string | null> {
+  const primaryResponse = await fetch(primaryUrl, { method: "HEAD" });
+  if (primaryResponse.ok) return primaryUrl;
+  const fallbackResponse = await fetch(fallbackUrl, { method: "HEAD" });
+  if (fallbackResponse.ok) return fallbackUrl;
+  return null;
 }
 
 function removeDiacritics(value: string): string {
@@ -55,18 +64,26 @@ async function main() {
       url: headshotTemplateUrl
         .replace("{year}", year.toString())
         .replace("{ref}", ref),
+      fallbackUrl: headshotFallbackTemplateUrl
+        .replace("{year}", year.toString())
+        .replace("{tla}", tla.toUpperCase()),
     })),
   );
 
   console.log(`Checking existence of ${headshots.length} headshot URLs...`);
 
-  const headshotChecks = await Promise.allSettled(
-    headshots.map((h) => checkHeadshotExists(h.url)),
+  const headshotResolutions = await Promise.allSettled(
+    headshots.map((h) => resolveHeadshotUrl(h.url, h.fallbackUrl)),
   );
-  const existingHeadshots = headshots.filter(
-    (_, i) =>
-      headshotChecks[i].status === "fulfilled" && headshotChecks[i].value,
-  );
+  const existingHeadshots = headshots
+    .map((h, i) => {
+      const result = headshotResolutions[i];
+      if (result.status === "fulfilled" && result.value) {
+        return { ...h, url: result.value };
+      }
+      return null;
+    })
+    .filter((h) => h !== null);
 
   console.log(`Found ${existingHeadshots.length} valid headshots.`);
 
